@@ -131,6 +131,15 @@ if url:
         unsafe_allow_html=True,
     )
 
+# Cache video info per-URL to avoid repeated calls and to show preview immediately after Load
+if "last_url" not in st.session_state or st.session_state.get("last_url") != url:
+    st.session_state["last_url"] = url
+    st.session_state["video_info"] = None
+    st.session_state["video_info_error"] = None
+
+# Preview container (we fill it automatically when URL is present)
+preview_container = st.empty()
+
 if "download_clicked" not in st.session_state:
     st.session_state["download_clicked"] = False
 if "download_ready" not in st.session_state:
@@ -275,10 +284,17 @@ if st.session_state.get("download_clicked") and url and not st.session_state.get
             st.session_state["download_ready"] = False
             st.session_state["download_error"] = None
 
-# Optional: Show video info when URL is pasted
-if url and not st.session_state.get("download_clicked"):
-    with st.expander("Preview video info"):
+# Preview: show automatically when URL exists. Use cached info when available.
+if url:
+    if st.session_state.get("video_info") is None:
         info, info_error = get_video_info(url)
+        st.session_state["video_info"] = info
+        st.session_state["video_info_error"] = info_error
+    else:
+        info = st.session_state.get("video_info")
+        info_error = st.session_state.get("video_info_error")
+
+    with preview_container.expander("Preview video info", expanded=bool(info)):
         if info:
             col_a, col_b = st.columns([1, 2])
             with col_a:
