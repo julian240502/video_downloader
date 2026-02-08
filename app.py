@@ -67,6 +67,15 @@ st.markdown(
             font-size: 1.05rem;
             padding: 0.9rem 1rem;
         }
+        /* Make the single download button fixed and full-width near the bottom on small screens */
+        .stButton>button {
+            position: fixed !important;
+            bottom: 12px !important;
+            left: 12px !important;
+            right: 12px !important;
+            z-index: 9999 !important;
+            border-radius: 8px !important;
+        }
         /* Reduce horizontal padding on the main container for small screens */
         .reportview-container .main {
             padding-left: 0.5rem;
@@ -125,10 +134,10 @@ if url:
 if "download_clicked" not in st.session_state:
     st.session_state["download_clicked"] = False
 
+# Single adaptive download button. On desktop it appears inline in the column; on mobile CSS fixes it to the bottom.
 col1, col2, col3 = st.columns([1, 2, 1])
 with col2:
-    # Desktop / main button: set session flag so download logic can be triggered
-    if st.button("⬇️ Download Video", type="primary", use_container_width=True, key="desktop_download"):
+    if st.button("⬇️ Download Video", type="primary", use_container_width=True, key="download"):
         st.session_state["download_clicked"] = True
 
 if st.session_state.get("download_clicked") and url:
@@ -233,8 +242,5 @@ if url and not st.session_state.get("download_clicked"):
         elif info_error:
             st.caption(f"Could not fetch info: {info_error}")
 
-# Mobile quick actions: duplicate download button placed after the preview/contents so it's easy to reach on small screens.
 st.markdown("<hr/>", unsafe_allow_html=True)
-with st.container():
-    if st.button("⬇️ Download Video (Mobile)", type="primary", use_container_width=True, key="mobile_download"):
-        st.session_state["download_clicked"] = True
+# Note: single button only — CSS will make it fixed on small screens, so no duplicate needed.
