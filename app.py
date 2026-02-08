@@ -80,7 +80,7 @@ st.markdown(
             right: 12px !important;
             z-index: 9999 !important;
             border-radius: 10px !important;
-            background-color: #065f46 !important; /* slightly accent color */
+            background-color: #ff7a00 !important; /* mobile accent -> orange */
             color: #ffffff !important;
             box-shadow: 0 8px 20px rgba(2,6,23,0.2) !important;
         }
@@ -164,32 +164,45 @@ download_container = col2.empty()
 with download_container:
     if not st.session_state.get("download_ready"):
         if st.button("⬇️ Load Video", type="primary", use_container_width=True, key="load"):
-            # Ensure preview info is fetched immediately so user sees detection + preview on first click
-            if url and not st.session_state.get("video_info"):
-                info, info_error = get_video_info(url)
-                st.session_state["video_info"] = info
-                st.session_state["video_info_error"] = info_error
-                # Update preview container right away
-                with preview_container.expander("Preview video info", expanded=bool(info)):
-                    if info:
-                        c_a, c_b = st.columns([1, 2])
-                        with c_a:
-                            if info.get("thumbnail"):
-                                st.image(info["thumbnail"], use_container_width=True)
-                        with c_b:
-                            st.write(f"**{info.get('title', 'Unknown')}**")
-                            if info.get("duration"):
-                                mins = int(info["duration"] // 60)
-                                secs = int(info["duration"] % 60)
-                                st.write(f"Duration: {mins}:{secs:02d}")
-                            if info.get("uploader"):
-                                st.write(f"By: {info['uploader']}")
-                            if info.get("view_count"):
-                                st.write(f"Views: {info['view_count']:,}")
-                    elif info_error:
-                        st.caption(f"Could not fetch info: {info_error}")
+            # Immediately hide the Load button and show progress in its place
+            download_container.empty()
+            prog = download_container.progress(0)
+            stat = download_container.empty()
 
-            # Trigger fetch in this same run
+            # Detection / preview step (show progress to user)
+            stat.text("Detecting format and fetching preview...")
+            if url and not st.session_state.get("video_info"):
+                try:
+                    info, info_error = get_video_info(url)
+                    st.session_state["video_info"] = info
+                    st.session_state["video_info_error"] = info_error
+                except Exception as e:
+                    st.session_state["video_info_error"] = str(e)
+
+            # Update preview immediately
+            info = st.session_state.get("video_info")
+            info_error = st.session_state.get("video_info_error")
+            preview_container.empty()
+            with preview_container.expander("Preview video info", expanded=bool(info)):
+                if info:
+                    c_a, c_b = st.columns([1, 2])
+                    with c_a:
+                        if info.get("thumbnail"):
+                            st.image(info["thumbnail"], use_container_width=True)
+                    with c_b:
+                        st.write(f"**{info.get('title', 'Unknown')}**")
+                        if info.get("duration"):
+                            mins = int(info["duration"] // 60)
+                            secs = int(info["duration"] % 60)
+                            st.write(f"Duration: {mins}:{secs:02d}")
+                        if info.get("uploader"):
+                            st.write(f"By: {info['uploader']}")
+                        if info.get("view_count"):
+                            st.write(f"Views: {info['view_count']:,}")
+                elif info_error:
+                    st.caption(f"Could not fetch info: {info_error}")
+
+            # proceed to actual fetch in the same run: mark clicked so fetch block executes
             st.session_state["download_clicked"] = True
             st.session_state["download_error"] = None
     else:
@@ -203,6 +216,7 @@ with download_container:
                     file_name=os.path.basename(file_path),
                     mime="video/mp4",
                     use_container_width=True,
+                    type="primary",
                 )
         else:
             st.info("Le fichier préparé est introuvable. Relancer le chargement.")
