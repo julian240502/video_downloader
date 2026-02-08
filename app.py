@@ -47,8 +47,12 @@ st.markdown(
     .platform-generic { background: #6b728020; color: #4b5563; }
     /* Streamlit button tweaks and mobile adjustments */
     .stButton>button {
-        font-size: 1rem;
-        padding: 0.75rem 1rem;
+        font-size: 1.03rem;
+        padding: 0.85rem 1rem;
+        min-height: 48px;
+        font-weight: 600;
+        border-radius: 10px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.08);
     }
 
     @media (max-width: 600px) {
@@ -64,8 +68,9 @@ st.markdown(
             padding: 0.2rem 0.5rem;
         }
         .stButton>button {
-            font-size: 1.05rem;
-            padding: 0.9rem 1rem;
+            font-size: 1.08rem;
+            padding: 1rem 1rem;
+            min-height: 56px;
         }
         /* Make the single download button fixed and full-width near the bottom on small screens */
         .stButton>button {
@@ -74,7 +79,10 @@ st.markdown(
             left: 12px !important;
             right: 12px !important;
             z-index: 9999 !important;
-            border-radius: 8px !important;
+            border-radius: 10px !important;
+            background-color: #065f46 !important; /* slightly accent color */
+            color: #ffffff !important;
+            box-shadow: 0 8px 20px rgba(2,6,23,0.2) !important;
         }
         /* Reduce horizontal padding on the main container for small screens */
         .reportview-container .main {
