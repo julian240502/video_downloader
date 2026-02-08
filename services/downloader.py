@@ -63,13 +63,15 @@ def download_with_ytdlp(
         Tuple of (output_path, error_message). error_message is None on success.
     """
     output_dir = output_dir or tempfile.gettempdir()
-    output_template = os.path.join(output_dir, "%(title)s.%(ext)s")
+    # Truncate title to 80 bytes + id for uniqueness; restrictfilenames handles invalid chars
+    output_template = os.path.join(output_dir, "%(title).80B - %(id)s.%(ext)s")
 
     format_selector = get_yt_dlp_format(quality)
 
     ydl_opts = {
         "format": format_selector,
         "outtmpl": output_template,
+        "restrictfilenames": True,
         "merge_output_format": "mp4",
         "quiet": False,
         "no_warnings": False,
