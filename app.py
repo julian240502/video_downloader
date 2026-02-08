@@ -156,6 +156,32 @@ download_container = col2.empty()
 with download_container:
     if not st.session_state.get("download_ready"):
         if st.button("⬇️ Load Video", type="primary", use_container_width=True, key="load"):
+            # Ensure preview info is fetched immediately so user sees detection + preview on first click
+            if url and not st.session_state.get("video_info"):
+                info, info_error = get_video_info(url)
+                st.session_state["video_info"] = info
+                st.session_state["video_info_error"] = info_error
+                # Update preview container right away
+                with preview_container.expander("Preview video info", expanded=bool(info)):
+                    if info:
+                        c_a, c_b = st.columns([1, 2])
+                        with c_a:
+                            if info.get("thumbnail"):
+                                st.image(info["thumbnail"], use_container_width=True)
+                        with c_b:
+                            st.write(f"**{info.get('title', 'Unknown')}**")
+                            if info.get("duration"):
+                                mins = int(info["duration"] // 60)
+                                secs = int(info["duration"] % 60)
+                                st.write(f"Duration: {mins}:{secs:02d}")
+                            if info.get("uploader"):
+                                st.write(f"By: {info['uploader']}")
+                            if info.get("view_count"):
+                                st.write(f"Views: {info['view_count']:,}")
+                    elif info_error:
+                        st.caption(f"Could not fetch info: {info_error}")
+
+            # Trigger fetch in this same run
             st.session_state["download_clicked"] = True
             st.session_state["download_error"] = None
     else:
