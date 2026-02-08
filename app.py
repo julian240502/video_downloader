@@ -170,90 +170,110 @@ with download_container:
 
 # If user requested load and URL provided, perform fetching (shows progress)
 if st.session_state.get("download_clicked") and url and not st.session_state.get("download_ready"):
-    with st.spinner("Fetching video..."):
-        output_dir = Path(tempfile.gettempdir()) / "video_downloader"
-        output_dir.mkdir(exist_ok=True)
+    output_dir = Path(tempfile.gettempdir()) / "video_downloader"
+    output_dir.mkdir(exist_ok=True)
 
-        # Try Facebook API first (stream to temp file)
-        try:
-            if platform == "facebook" and facebook_api_url:
-                download_url = try_facebook_api(url, quality, facebook_api_url)
-                if download_url:
-                    tmpf = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4", dir=str(output_dir))
-                    try:
-                        with requests.get(download_url, stream=True, timeout=60) as r:
-                            r.raise_for_status()
-                            for chunk in r.iter_content(chunk_size=8192):
-                                if chunk:
-                                    tmpf.write(chunk)
-                        tmpf.close()
-                        st.session_state["download_file_path"] = tmpf.name
-                        st.session_state["download_ready"] = True
-                        st.session_state["download_clicked"] = False
-                    except Exception as e:
-                        try:
-                            tmpf.close()
-                        except Exception:
-                            pass
-                        try:
-                            os.remove(tmpf.name)
-                        except Exception:
-                            pass
-                        st.session_state["download_error"] = str(e)
+    # Replace the button in-place with progress widgets so the user sees immediate feedback
+    progress_bar = download_container.progress(0)
+    status_text = download_container.empty()
 
-            # If not ready via API, fallback to yt-dlp with progress hooks
-            if not st.session_state.get("download_ready"):
-                progress_bar = st.progress(0)
-                status_text = st.empty()
-
-                def progress_hook(d):
-                    if d.get("status") == "downloading":
-                        try:
-                            total = d.get("total_bytes") or d.get("total_bytes_estimate")
-                            downloaded = d.get("downloaded_bytes", 0)
-                            if total and total > 0:
-                                pct = min(100, int(100 * downloaded / total))
-                                progress_bar.progress(pct / 100)
-                                status_text.text(f"Downloading... {pct}%")
-                        except Exception:
-                            status_text.text("Downloading...")
-                    elif d.get("status") == "finished":
-                        progress_bar.progress(100)
-                        status_text.text("Processing...")
-
-                file_path, error = download_with_ytdlp(
-                    url,
-                    quality=quality,
-                    output_dir=str(output_dir),
-                    progress_hook=progress_hook,
-                )
-
-                progress_bar.empty()
-                status_text.empty()
-
-                if error:
-                    st.session_state["download_error"] = error
-                elif file_path and os.path.exists(file_path):
-                    # Keep the path; user will save via the download button
-                    st.session_state["download_file_path"] = str(file_path)
+    # Try Facebook API first (stream to temp file)
+    try:
+        if platform == "facebook" and facebook_api_url:
+            download_url = try_facebook_api(url, quality, facebook_api_url)
+            if download_url:
+                tmpf = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4", dir=str(output_dir))
+                try:
+                    with requests.get(download_url, stream=True, timeout=60) as r:
+                        r.raise_for_status()
+                        total = int(r.headers.get("Content-Length", 0) or 0)
+                        written = 0
+                        for chunk in r.iter_content(chunk_size=8192):
+                            if chunk:
+                                tmpf.write(chunk)
+                                written += len(chunk)
+                                if total:
+                                    pct = min(100, int(100 * written / total))
+                                    progress_bar.progress(pct / 100)
+                                    status_text.text(f"Downloading... {pct}%")
+                    tmpf.close()
+                    st.session_state["download_file_path"] = tmpf.name
                     st.session_state["download_ready"] = True
                     st.session_state["download_clicked"] = False
-        except Exception as e:
-            st.session_state["download_error"] = str(e)
+                except Exception as e:
+                    try:
+                        tmpf.close()
+                    except Exception:
+                        pass
+                    try:
+                        os.remove(tmpf.name)
+                    except Exception:
+                        pass
+                    st.session_state["download_error"] = str(e)
 
-    # Show result or error in the same container
-    if st.session_state.get("download_error"):
-        with download_container:
-            st.error(f"❌ Download failed: {st.session_state.get('download_error')}")
-            if platform == "facebook" and not facebook_api_url:
-                st.info(
-                    "� **Tip for Facebook videos:** If yt-dlp échoue, exécutez l'API Facebook localement "
-                    "et ajoutez son URL dans les paramètres sidebar."
+        # If not ready via API, fallback to yt-dlp with progress hooks
+        if not st.session_state.get("download_ready"):
+            def progress_hook(d):
+                if d.get("status") == "downloading":
+                    try:
+                        total = d.get("total_bytes") or d.get("total_bytes_estimate")
+                        downloaded = d.get("downloaded_bytes", 0)
+                        if total and total > 0:
+                            pct = min(100, int(100 * downloaded / total))
+                            progress_bar.progress(pct / 100)
+                            status_text.text(f"Downloading... {pct}%")
+                    except Exception:
+                        status_text.text("Downloading...")
+                elif d.get("status") == "finished":
+                    progress_bar.progress(100)
+                    status_text.text("Processing...")
+
+            file_path, error = download_with_ytdlp(
+                url,
+                quality=quality,
+                output_dir=str(output_dir),
+                progress_hook=progress_hook,
+            )
+
+            # Clear status widgets before replacing with save button
+            progress_bar.empty()
+            status_text.empty()
+
+            if error:
+                st.session_state["download_error"] = error
+            elif file_path and os.path.exists(file_path):
+                st.session_state["download_file_path"] = str(file_path)
+                st.session_state["download_ready"] = True
+                st.session_state["download_clicked"] = False
+    except Exception as e:
+        st.session_state["download_error"] = str(e)
+
+    # Show result or error in the same container immediately
+    if st.session_state.get("download_ready"):
+        # replace container contents with the save button so user can immediately click it
+        download_container.empty()
+        file_path = st.session_state.get("download_file_path")
+        if file_path and os.path.exists(file_path):
+            with open(file_path, "rb") as f:
+                download_container.download_button(
+                    label="📥 Save Video",
+                    data=f,
+                    file_name=os.path.basename(file_path),
+                    mime="video/mp4",
+                    use_container_width=True,
                 )
-            if st.button("⬇️ Retry Load", use_container_width=True, key="retry2"):
-                st.session_state["download_clicked"] = True
-                st.session_state["download_ready"] = False
-                st.session_state["download_error"] = None
+    elif st.session_state.get("download_error"):
+        download_container.empty()
+        download_container.error(f"❌ Download failed: {st.session_state.get('download_error')}")
+        if platform == "facebook" and not facebook_api_url:
+            download_container.info(
+                "💡 **Tip for Facebook videos:** If yt-dlp échoue, exécutez l'API Facebook localement "
+                "et ajoutez son URL dans les paramètres sidebar."
+            )
+        if download_container.button("⬇️ Retry Load", use_container_width=True, key="retry2"):
+            st.session_state["download_clicked"] = True
+            st.session_state["download_ready"] = False
+            st.session_state["download_error"] = None
 
 # Optional: Show video info when URL is pasted
 if url and not st.session_state.get("download_clicked"):
