@@ -6,6 +6,7 @@ from pathlib import Path
 
 import requests
 import streamlit as st
+import streamlit.components.v1 as components
 
 from services.downloader import (
     detect_platform,
@@ -318,6 +319,33 @@ if st.session_state.get("download_clicked") and url and not st.session_state.get
                     file_name=os.path.basename(file_path),
                     mime="video/mp4",
                     use_container_width=True,
+                )
+                # Inject JS to specifically style the Save button (makes it more prominent than Load)
+                components.html(
+                    """
+                    <script>
+                    (function(){
+                      const btn = Array.from(document.querySelectorAll('button')).find(b => b.innerText && b.innerText.includes('📥 Save Video'));
+                      if (!btn) return;
+                      btn.style.backgroundColor = '#ff7a00';
+                      btn.style.color = '#ffffff';
+                      btn.style.fontSize = '1.08rem';
+                      btn.style.padding = '1rem';
+                      btn.style.minHeight = '56px';
+                      btn.style.borderRadius = '12px';
+                      btn.style.boxShadow = '0 10px 24px rgba(0,0,0,0.22)';
+                      btn.style.zIndex = 99999;
+                      // On small screens make it fixed and full-width
+                      if (window.innerWidth <= 600) {
+                        btn.style.position = 'fixed';
+                        btn.style.left = '12px';
+                        btn.style.right = '12px';
+                        btn.style.bottom = '12px';
+                      }
+                    })();
+                    </script>
+                    """,
+                    height=0,
                 )
     elif st.session_state.get("download_error"):
         download_container.empty()
