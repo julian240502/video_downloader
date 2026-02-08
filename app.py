@@ -6,7 +6,6 @@ from pathlib import Path
 
 import requests
 import streamlit as st
-import streamlit.components.v1 as components
 
 from services.downloader import (
     detect_platform,
@@ -42,20 +41,49 @@ st.markdown(
         border-radius: 9999px;
         font-size: 0.875rem;
         font-weight: 500;
+        margin-top: 0.5rem;
     }
     .platform-youtube { background: #ff000020; color: #cc0000; }
     .platform-facebook { background: #1877f220; color: #1877f2; }
     .platform-generic { background: #6b728020; color: #4b5563; }
-    /* Streamlit button tweaks and mobile adjustments */
-    .stButton>button {
-        font-size: 1.03rem;
-        padding: 0.85rem 1rem;
-        min-height: 48px;
-        font-weight: 600;
-        border-radius: 10px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    
+    /* Preview card styling */
+    .preview-card {
+        background: #f9fafb;
+        border: 1px solid #e5e7eb;
+        border-radius: 12px;
+        padding: 1rem;
+        margin: 1rem 0;
     }
-
+    .preview-title {
+        font-weight: 600;
+        font-size: 1.1rem;
+        margin-bottom: 0.5rem;
+        color: #1f2937;
+    }
+    .preview-meta {
+        color: #6b7280;
+        font-size: 0.9rem;
+    }
+    
+    /* Download button styling */
+    .stDownloadButton>button {
+        font-size: 1.1rem;
+        padding: 0.85rem 2rem;
+        min-height: 52px;
+        font-weight: 600;
+        border-radius: 12px;
+        background: linear-gradient(135deg, #ff6b35 0%, #ff8c42 100%);
+        border: none;
+        color: white;
+        box-shadow: 0 4px 14px rgba(255, 107, 53, 0.4);
+        transition: all 0.2s;
+    }
+    .stDownloadButton>button:hover {
+        box-shadow: 0 6px 20px rgba(255, 107, 53, 0.6);
+        transform: translateY(-2px);
+    }
+    
     @media (max-width: 600px) {
         .main-header {
             font-size: 1.5rem;
@@ -64,31 +92,14 @@ st.markdown(
             font-size: 0.95rem;
             margin-bottom: 1rem;
         }
-        .platform-badge {
-            font-size: 0.75rem;
-            padding: 0.2rem 0.5rem;
-        }
-        .stButton>button {
-            font-size: 1.08rem;
-            padding: 1rem 1rem;
-            min-height: 56px;
-        }
-        /* Make the single download button fixed and full-width near the bottom on small screens */
-        .stButton>button {
+        .stDownloadButton>button {
             position: fixed !important;
-            bottom: 12px !important;
-            left: 12px !important;
-            right: 12px !important;
+            bottom: 16px !important;
+            left: 16px !important;
+            right: 16px !important;
             z-index: 9999 !important;
-            border-radius: 10px !important;
-            background-color: #ff7a00 !important; /* mobile accent -> orange */
-            color: #ffffff !important;
-            box-shadow: 0 8px 20px rgba(2,6,23,0.2) !important;
-        }
-        /* Reduce horizontal padding on the main container for small screens */
-        .reportview-container .main {
-            padding-left: 0.5rem;
-            padding-right: 0.5rem;
+            font-size: 1.1rem !important;
+            padding: 1.2rem !important;
         }
     }
     </style>
@@ -98,35 +109,58 @@ st.markdown(
 
 st.markdown('<p class="main-header">⬇️ Video Downloader</p>', unsafe_allow_html=True)
 st.markdown(
-    '<p class="sub-header">Download videos from YouTube, Shorts, Facebook & Reels</p>',
+    '<p class="sub-header">Paste a link and get your video instantly</p>',
     unsafe_allow_html=True,
 )
 
-# Sidebar - optional Facebook API
+# Sidebar settings
 with st.sidebar:
     st.subheader("⚙️ Settings")
     facebook_api_url = st.text_input(
         "Facebook API URL (optional)",
         placeholder="http://localhost:8000",
-        help="Use the Facebook Video Download API for Facebook videos when yt-dlp fails. Leave empty to use yt-dlp only.",
+        help="For Facebook videos when yt-dlp fails",
     )
+    quality = st.selectbox(
+        "📐 Quality",
+        options=["best", "1080p", "720p", "480p", "360p", "worst"],
+        index=0,
+        help="Higher quality = larger file size",
+    )
+    st.markdown("---")
+    st.caption("💡 **How it works:**")
+    st.caption("1. Paste your video URL")
+    st.caption("2. Preview loads automatically")
+    st.caption("3. Download when ready")
 
-# Main form
+# Initialize session state with simpler structure
+if "state" not in st.session_state:
+    st.session_state.state = {
+        "current_url": None,
+        "video_info": None,
+        "download_status": "idle",  # idle, fetching_info, downloading, ready, error
+        "file_path": None,
+        "error": None,
+    }
+
+# Main URL input
 url = st.text_input(
     "🔗 Video URL",
-    placeholder="Paste YouTube, YouTube Shorts, Facebook, or Reels link here...",
-    help="Supports: youtube.com, youtu.be, youtube.com/shorts/, facebook.com, fb.watch, fb.com",
+    placeholder="Paste YouTube, Shorts, Facebook, or Reels link here...",
+    help="Supports: youtube.com, youtu.be, youtube.com/shorts/, facebook.com, fb.watch",
+    key="url_input",
 )
 
-quality = st.selectbox(
-    "📐 Quality",
-    options=["best", "1080p", "720p", "480p", "360p", "worst"],
-    index=0,
-    help="Best = highest available, Worst = lowest (faster download)",
-)
+# Detect if URL changed
+url_changed = url != st.session_state.state["current_url"]
+if url_changed:
+    st.session_state.state["current_url"] = url
+    st.session_state.state["video_info"] = None
+    st.session_state.state["download_status"] = "idle"
+    st.session_state.state["file_path"] = None
+    st.session_state.state["error"] = None
 
-# Detect platform when URL is entered
-platform = None
+# Auto-detect platform and show badge
 if url:
     platform = detect_platform(url)
     platform_labels = {
@@ -136,258 +170,180 @@ if url:
     }
     label, css_class = platform_labels.get(platform, ("Unknown", "platform-generic"))
     st.markdown(
-        f'<span class="platform-badge {css_class}">Detected: {label}</span>',
+        f'<span class="platform-badge {css_class}">📍 {label}</span>',
         unsafe_allow_html=True,
     )
+    st.markdown("")  # spacing
 
-# Cache video info per-URL to avoid repeated calls and to show preview immediately after Load
-if "last_url" not in st.session_state or st.session_state.get("last_url") != url:
-    st.session_state["last_url"] = url
-    st.session_state["video_info"] = None
-    st.session_state["video_info_error"] = None
+# Container for all dynamic content
+main_container = st.container()
 
-# Preview container (we fill it automatically when URL is present)
-preview_container = st.empty()
+with main_container:
+    # PHASE 1: Auto-fetch video info when URL is provided
+    if url and st.session_state.state["video_info"] is None and st.session_state.state["download_status"] == "idle":
+        with st.spinner("🔍 Fetching video info..."):
+            try:
+                info, info_error = get_video_info(url)
+                st.session_state.state["video_info"] = info
+                if info_error:
+                    st.session_state.state["error"] = info_error
+                st.rerun()
+            except Exception as e:
+                st.session_state.state["error"] = str(e)
+                st.error(f"❌ Could not fetch video info: {e}")
 
-if "download_clicked" not in st.session_state:
-    st.session_state["download_clicked"] = False
-if "download_ready" not in st.session_state:
-    st.session_state["download_ready"] = False
-if "download_file_path" not in st.session_state:
-    st.session_state["download_file_path"] = None
-if "download_error" not in st.session_state:
-    st.session_state["download_error"] = None
+    # PHASE 2: Show preview and download button
+    if st.session_state.state["video_info"]:
+        info = st.session_state.state["video_info"]
+        
+        # Preview card
+        col1, col2 = st.columns([1, 2])
+        with col1:
+            if info.get("thumbnail"):
+                st.image(info["thumbnail"], use_container_width=True)
+        
+        with col2:
+            st.markdown(f'<div class="preview-title">{info.get("title", "Unknown title")}</div>', unsafe_allow_html=True)
+            
+            meta_parts = []
+            if info.get("uploader"):
+                meta_parts.append(f"👤 {info['uploader']}")
+            if info.get("duration"):
+                mins = int(info["duration"] // 60)
+                secs = int(info["duration"] % 60)
+                meta_parts.append(f"⏱️ {mins}:{secs:02d}")
+            if info.get("view_count"):
+                meta_parts.append(f"👁️ {info['view_count']:,} views")
+            
+            if meta_parts:
+                st.markdown(f'<div class="preview-meta">{" • ".join(meta_parts)}</div>', unsafe_allow_html=True)
+        
+        st.markdown("")  # spacing
 
-# Single adaptive load -> save flow: first click = load, then same area becomes save when ready.
-col1, col2, col3 = st.columns([1, 2, 1])
-download_container = col2.empty()
+        # PHASE 3: Download logic
+        if st.session_state.state["download_status"] == "idle":
+            # Show single download button
+            col_center = st.columns([1, 2, 1])[1]
+            with col_center:
+                if st.button("⬇️ Download Video", type="primary", use_container_width=True, key="start_download"):
+                    st.session_state.state["download_status"] = "downloading"
+                    st.rerun()
+        
+        elif st.session_state.state["download_status"] == "downloading":
+            # Show progress
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            
+            output_dir = Path(tempfile.gettempdir()) / "video_downloader"
+            output_dir.mkdir(exist_ok=True)
+            
+            try:
+                # Try Facebook API first if applicable
+                if platform == "facebook" and facebook_api_url:
+                    download_url = try_facebook_api(url, quality, facebook_api_url)
+                    if download_url:
+                        tmpf = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4", dir=str(output_dir))
+                        try:
+                            with requests.get(download_url, stream=True, timeout=60) as r:
+                                r.raise_for_status()
+                                total = int(r.headers.get("Content-Length", 0) or 0)
+                                written = 0
+                                for chunk in r.iter_content(chunk_size=8192):
+                                    if chunk:
+                                        tmpf.write(chunk)
+                                        written += len(chunk)
+                                        if total:
+                                            pct = min(100, int(100 * written / total))
+                                            progress_bar.progress(pct / 100)
+                                            status_text.text(f"⬇️ Downloading... {pct}%")
+                            tmpf.close()
+                            st.session_state.state["file_path"] = tmpf.name
+                            st.session_state.state["download_status"] = "ready"
+                            st.rerun()
+                        except Exception as e:
+                            try:
+                                tmpf.close()
+                                os.remove(tmpf.name)
+                            except:
+                                pass
+                            raise e
 
-with download_container:
-    if not st.session_state.get("download_ready"):
-        if st.button("⬇️ Load Video", type="primary", use_container_width=True, key="load"):
-            # Immediately hide the Load button and show progress in its place
-            download_container.empty()
-            prog = download_container.progress(0)
-            stat = download_container.empty()
-
-            # Detection / preview step (show progress to user)
-            stat.text("Detecting format and fetching preview...")
-            if url and not st.session_state.get("video_info"):
-                try:
-                    info, info_error = get_video_info(url)
-                    st.session_state["video_info"] = info
-                    st.session_state["video_info_error"] = info_error
-                except Exception as e:
-                    st.session_state["video_info_error"] = str(e)
-
-            # Update preview immediately
-            info = st.session_state.get("video_info")
-            info_error = st.session_state.get("video_info_error")
-            preview_container.empty()
-            with preview_container.expander("Preview video info", expanded=bool(info)):
-                if info:
-                    c_a, c_b = st.columns([1, 2])
-                    with c_a:
-                        if info.get("thumbnail"):
-                            st.image(info["thumbnail"], use_container_width=True)
-                    with c_b:
-                        st.write(f"**{info.get('title', 'Unknown')}**")
-                        if info.get("duration"):
-                            mins = int(info["duration"] // 60)
-                            secs = int(info["duration"] % 60)
-                            st.write(f"Duration: {mins}:{secs:02d}")
-                        if info.get("uploader"):
-                            st.write(f"By: {info['uploader']}")
-                        if info.get("view_count"):
-                            st.write(f"Views: {info['view_count']:,}")
-                elif info_error:
-                    st.caption(f"Could not fetch info: {info_error}")
-
-            # proceed to actual fetch in the same run: mark clicked so fetch block executes
-            st.session_state["download_clicked"] = True
-            st.session_state["download_error"] = None
-    else:
-        # File ready: show save button
-        file_path = st.session_state.get("download_file_path")
-        if file_path and os.path.exists(file_path):
-            with open(file_path, "rb") as f:
-                st.download_button(
-                    label="📥 Save Video",
-                    data=f,
-                    file_name=os.path.basename(file_path),
-                    mime="video/mp4",
-                    use_container_width=True,
-                    type="primary",
-                )
-        else:
-            st.info("Le fichier préparé est introuvable. Relancer le chargement.")
-            if st.button("⬇️ Retry Load", use_container_width=True, key="retry"):
-                st.session_state["download_clicked"] = True
-                st.session_state["download_ready"] = False
-                st.session_state["download_error"] = None
-
-# If user requested load and URL provided, perform fetching (shows progress)
-if st.session_state.get("download_clicked") and url and not st.session_state.get("download_ready"):
-    output_dir = Path(tempfile.gettempdir()) / "video_downloader"
-    output_dir.mkdir(exist_ok=True)
-
-    # Replace the button in-place with progress widgets so the user sees immediate feedback
-    progress_bar = download_container.progress(0)
-    status_text = download_container.empty()
-
-    # Try Facebook API first (stream to temp file)
-    try:
-        if platform == "facebook" and facebook_api_url:
-            download_url = try_facebook_api(url, quality, facebook_api_url)
-            if download_url:
-                tmpf = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4", dir=str(output_dir))
-                try:
-                    with requests.get(download_url, stream=True, timeout=60) as r:
-                        r.raise_for_status()
-                        total = int(r.headers.get("Content-Length", 0) or 0)
-                        written = 0
-                        for chunk in r.iter_content(chunk_size=8192):
-                            if chunk:
-                                tmpf.write(chunk)
-                                written += len(chunk)
-                                if total:
-                                    pct = min(100, int(100 * written / total))
+                # Fallback to yt-dlp
+                if st.session_state.state["download_status"] == "downloading":
+                    def progress_hook(d):
+                        if d.get("status") == "downloading":
+                            try:
+                                total = d.get("total_bytes") or d.get("total_bytes_estimate")
+                                downloaded = d.get("downloaded_bytes", 0)
+                                if total and total > 0:
+                                    pct = min(100, int(100 * downloaded / total))
                                     progress_bar.progress(pct / 100)
-                                    status_text.text(f"Downloading... {pct}%")
-                    tmpf.close()
-                    st.session_state["download_file_path"] = tmpf.name
-                    st.session_state["download_ready"] = True
-                    st.session_state["download_clicked"] = False
-                except Exception as e:
-                    try:
-                        tmpf.close()
-                    except Exception:
-                        pass
-                    try:
-                        os.remove(tmpf.name)
-                    except Exception:
-                        pass
-                    st.session_state["download_error"] = str(e)
+                                    status_text.text(f"⬇️ Downloading... {pct}%")
+                            except:
+                                status_text.text("⬇️ Downloading...")
+                        elif d.get("status") == "finished":
+                            progress_bar.progress(100)
+                            status_text.text("✨ Processing...")
 
-        # If not ready via API, fallback to yt-dlp with progress hooks
-        if not st.session_state.get("download_ready"):
-            def progress_hook(d):
-                if d.get("status") == "downloading":
-                    try:
-                        total = d.get("total_bytes") or d.get("total_bytes_estimate")
-                        downloaded = d.get("downloaded_bytes", 0)
-                        if total and total > 0:
-                            pct = min(100, int(100 * downloaded / total))
-                            progress_bar.progress(pct / 100)
-                            status_text.text(f"Downloading... {pct}%")
-                    except Exception:
-                        status_text.text("Downloading...")
-                elif d.get("status") == "finished":
-                    progress_bar.progress(100)
-                    status_text.text("Processing...")
+                    file_path, error = download_with_ytdlp(
+                        url,
+                        quality=quality,
+                        output_dir=str(output_dir),
+                        progress_hook=progress_hook,
+                    )
 
-            file_path, error = download_with_ytdlp(
-                url,
-                quality=quality,
-                output_dir=str(output_dir),
-                progress_hook=progress_hook,
-            )
+                    if error:
+                        st.session_state.state["error"] = error
+                        st.session_state.state["download_status"] = "error"
+                    elif file_path and os.path.exists(file_path):
+                        st.session_state.state["file_path"] = str(file_path)
+                        st.session_state.state["download_status"] = "ready"
+                    
+                    st.rerun()
+                    
+            except Exception as e:
+                st.session_state.state["error"] = str(e)
+                st.session_state.state["download_status"] = "error"
+                st.rerun()
+        
+        elif st.session_state.state["download_status"] == "ready":
+            # Show save button
+            file_path = st.session_state.state["file_path"]
+            if file_path and os.path.exists(file_path):
+                st.success("✅ Video ready to save!")
+                col_center = st.columns([1, 2, 1])[1]
+                with col_center:
+                    with open(file_path, "rb") as f:
+                        st.download_button(
+                            label="💾 Save to Device",
+                            data=f,
+                            file_name=f"video_{Path(file_path).stem}.mp4",
+                            mime="video/mp4",
+                            use_container_width=True,
+                            type="primary",
+                        )
+                
+                # Option to download another
+                if st.button("🔄 Download Another Video", use_container_width=False):
+                    st.session_state.state["download_status"] = "idle"
+                    st.session_state.state["file_path"] = None
+                    st.rerun()
+            else:
+                st.error("❌ File not found. Please try again.")
+                if st.button("🔄 Retry", type="primary"):
+                    st.session_state.state["download_status"] = "idle"
+                    st.rerun()
+        
+        elif st.session_state.state["download_status"] == "error":
+            st.error(f"❌ Download failed: {st.session_state.state['error']}")
+            if platform == "facebook" and not facebook_api_url:
+                st.info("💡 **Tip:** For Facebook videos, try enabling the Facebook API in settings")
+            
+            if st.button("🔄 Retry Download", type="primary"):
+                st.session_state.state["download_status"] = "idle"
+                st.session_state.state["error"] = None
+                st.rerun()
 
-            # Clear status widgets before replacing with save button
-            progress_bar.empty()
-            status_text.empty()
-
-            if error:
-                st.session_state["download_error"] = error
-            elif file_path and os.path.exists(file_path):
-                st.session_state["download_file_path"] = str(file_path)
-                st.session_state["download_ready"] = True
-                st.session_state["download_clicked"] = False
-    except Exception as e:
-        st.session_state["download_error"] = str(e)
-
-    # Show result or error in the same container immediately
-    if st.session_state.get("download_ready"):
-        # replace container contents with the save button so user can immediately click it
-        download_container.empty()
-        file_path = st.session_state.get("download_file_path")
-        if file_path and os.path.exists(file_path):
-            with open(file_path, "rb") as f:
-                download_container.download_button(
-                    label="📥 Save Video",
-                    data=f,
-                    file_name=os.path.basename(file_path),
-                    mime="video/mp4",
-                    use_container_width=True,
-                )
-                # Inject JS to specifically style the Save button (makes it more prominent than Load)
-                components.html(
-                    """
-                    <script>
-                    (function(){
-                      const btn = Array.from(document.querySelectorAll('button')).find(b => b.innerText && b.innerText.includes('📥 Save Video'));
-                      if (!btn) return;
-                      btn.style.backgroundColor = '#ff7a00';
-                      btn.style.color = '#ffffff';
-                      btn.style.fontSize = '1.08rem';
-                      btn.style.padding = '1rem';
-                      btn.style.minHeight = '56px';
-                      btn.style.borderRadius = '12px';
-                      btn.style.boxShadow = '0 10px 24px rgba(0,0,0,0.22)';
-                      btn.style.zIndex = 99999;
-                      // On small screens make it fixed and full-width
-                      if (window.innerWidth <= 600) {
-                        btn.style.position = 'fixed';
-                        btn.style.left = '12px';
-                        btn.style.right = '12px';
-                        btn.style.bottom = '12px';
-                      }
-                    })();
-                    </script>
-                    """,
-                    height=0,
-                )
-    elif st.session_state.get("download_error"):
-        download_container.empty()
-        download_container.error(f"❌ Download failed: {st.session_state.get('download_error')}")
-        if platform == "facebook" and not facebook_api_url:
-            download_container.info(
-                "💡 **Tip for Facebook videos:** If yt-dlp échoue, exécutez l'API Facebook localement "
-                "et ajoutez son URL dans les paramètres sidebar."
-            )
-        if download_container.button("⬇️ Retry Load", use_container_width=True, key="retry2"):
-            st.session_state["download_clicked"] = True
-            st.session_state["download_ready"] = False
-            st.session_state["download_error"] = None
-
-# Preview: show automatically when URL exists. Use cached info when available.
-if url:
-    if st.session_state.get("video_info") is None:
-        info, info_error = get_video_info(url)
-        st.session_state["video_info"] = info
-        st.session_state["video_info_error"] = info_error
-    else:
-        info = st.session_state.get("video_info")
-        info_error = st.session_state.get("video_info_error")
-
-    with preview_container.expander("Preview video info", expanded=bool(info)):
-        if info:
-            col_a, col_b = st.columns([1, 2])
-            with col_a:
-                if info.get("thumbnail"):
-                    st.image(info["thumbnail"], use_container_width=True)
-            with col_b:
-                st.write(f"**{info.get('title', 'Unknown')}**")
-                if info.get("duration"):
-                    mins = int(info["duration"] // 60)
-                    secs = int(info["duration"] % 60)
-                    st.write(f"Duration: {mins}:{secs:02d}")
-                if info.get("uploader"):
-                    st.write(f"By: {info['uploader']}")
-                if info.get("view_count"):
-                    st.write(f"Views: {info['view_count']:,}")
-        elif info_error:
-            st.caption(f"Could not fetch info: {info_error}")
-
-st.markdown("<hr/>", unsafe_allow_html=True)
-# Note: single button only — CSS will make it fixed on small screens, so no duplicate needed.
+# Footer
+st.markdown("---")
+st.caption("🛡️ Supports: YouTube, YouTube Shorts, Facebook, Instagram Reels")
