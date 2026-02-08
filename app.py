@@ -18,7 +18,7 @@ from services.downloader import (
 st.set_page_config(
     page_title="Video Downloader",
     page_icon="⬇️",
-    layout="centered",
+    layout="wide",
 )
 
 # Custom styles
@@ -45,6 +45,34 @@ st.markdown(
     .platform-youtube { background: #ff000020; color: #cc0000; }
     .platform-facebook { background: #1877f220; color: #1877f2; }
     .platform-generic { background: #6b728020; color: #4b5563; }
+    /* Streamlit button tweaks and mobile adjustments */
+    .stButton>button {
+        font-size: 1rem;
+        padding: 0.75rem 1rem;
+    }
+
+    @media (max-width: 600px) {
+        .main-header {
+            font-size: 1.5rem;
+        }
+        .sub-header {
+            font-size: 0.95rem;
+            margin-bottom: 1rem;
+        }
+        .platform-badge {
+            font-size: 0.75rem;
+            padding: 0.2rem 0.5rem;
+        }
+        .stButton>button {
+            font-size: 1.05rem;
+            padding: 0.9rem 1rem;
+        }
+        /* Reduce horizontal padding on the main container for small screens */
+        .reportview-container .main {
+            padding-left: 0.5rem;
+            padding-right: 0.5rem;
+        }
+    }
     </style>
     """,
     unsafe_allow_html=True,
@@ -94,11 +122,16 @@ if url:
         unsafe_allow_html=True,
     )
 
+if "download_clicked" not in st.session_state:
+    st.session_state["download_clicked"] = False
+
 col1, col2, col3 = st.columns([1, 2, 1])
 with col2:
-    download_clicked = st.button("⬇️ Download Video", type="primary", use_container_width=True)
+    # Desktop / main button: set session flag so download logic can be triggered
+    if st.button("⬇️ Download Video", type="primary", use_container_width=True, key="desktop_download"):
+        st.session_state["download_clicked"] = True
 
-if download_clicked and url:
+if st.session_state.get("download_clicked") and url:
     with st.spinner("Fetching video..."):
         # Try Facebook API first for Facebook URLs (if configured)
         if platform == "facebook" and facebook_api_url:
@@ -179,7 +212,7 @@ if download_clicked and url:
                 pass
 
 # Optional: Show video info when URL is pasted
-if url and not download_clicked:
+if url and not st.session_state.get("download_clicked"):
     with st.expander("Preview video info"):
         info, info_error = get_video_info(url)
         if info:
@@ -199,3 +232,9 @@ if url and not download_clicked:
                     st.write(f"Views: {info['view_count']:,}")
         elif info_error:
             st.caption(f"Could not fetch info: {info_error}")
+
+# Mobile quick actions: duplicate download button placed after the preview/contents so it's easy to reach on small screens.
+st.markdown("<hr/>", unsafe_allow_html=True)
+with st.container():
+    if st.button("⬇️ Download Video (Mobile)", type="primary", use_container_width=True, key="mobile_download"):
+        st.session_state["download_clicked"] = True
