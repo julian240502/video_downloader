@@ -10,7 +10,7 @@ echo ╚════════════════════════
 echo.
 
 REM Vérifier Python
-python --version >nul 2>&1
+py --version >nul 2>&1
 if errorlevel 1 (
     echo ❌ ERREUR : Python n'est pas installé !
     echo.
@@ -33,7 +33,7 @@ if exist "venv\" (
     echo.
 ) else (
     echo 📦 Création de l'environnement virtuel...
-    python -m venv venv
+    py -m venv venv
     if errorlevel 1 (
         echo ❌ ERREUR : Impossible de créer venv
         pause
