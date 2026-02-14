@@ -44,14 +44,12 @@ if exist "venv\" (
 )
 
 REM Activer et installer les dépendances
-call venv\Scripts\activate.bat
-
 echo 📚 Installation des dépendances...
 echo    (Cela peut prendre 2-5 minutes)
 echo.
 
-pip install --upgrade pip >nul 2>&1
-pip install -r requirements.txt
+py -m pip install --upgrade pip >nul 2>&1
+py -m pip install -r requirements.txt
 
 if errorlevel 1 (
     echo ❌ ERREUR : Impossible d'installer les dépendances
