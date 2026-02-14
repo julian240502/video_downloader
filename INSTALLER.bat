@@ -8,7 +8,21 @@ echo    INSTALLATION (une fois seulement)
 echo ========================================
 echo.
 
-REM Verifier Python
+REM Aller au repertoire correct
+cd /d "%~dp0"
+echo Repertoire : %CD%
+echo.
+
+REM Verifier que requirements.txt existe
+if not exist "requirements.txt" (
+    echo ERREUR : requirements.txt n'existe pas !
+    echo Ce fichier doit etre dans le meme dossier que INSTALLER.bat
+    pause
+    exit /b 1
+)
+
+echo OK - requirements.txt trouve
+echo.
 py --version >nul 2>&1
 if errorlevel 1 (
     echo ERREUR : Python n'est pas installe !
