@@ -143,6 +143,30 @@ if "state" not in st.session_state:
         "error": None,
     }
 
+if "reset_flag" not in st.session_state:
+    st.session_state.reset_flag = False
+
+if "url_input" not in st.session_state:
+    st.session_state.url_input = ""
+
+# Handle reset
+if st.session_state.reset_flag:
+    st.session_state.state = {
+        "current_url": None,
+        "video_info": None,
+        "download_status": "idle",
+        "file_path": None,
+        "error": None,
+    }
+    st.session_state.url_input = ""
+    st.session_state.reset_flag = False
+    # Scroll to top
+    st.markdown("""
+        <script>
+            window.scrollTo(0, 0);
+        </script>
+    """, unsafe_allow_html=True)
+
 # Main URL input
 url = st.text_input(
     "🔗 Video URL",
@@ -325,8 +349,7 @@ with main_container:
                 
                 # Option to download another
                 if st.button("🔄 Download Another Video", use_container_width=False):
-                    st.session_state.state["download_status"] = "idle"
-                    st.session_state.state["file_path"] = None
+                    st.session_state.reset_flag = True
                     st.rerun()
             else:
                 st.error("❌ File not found. Please try again.")
