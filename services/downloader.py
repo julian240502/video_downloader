@@ -172,6 +172,9 @@ def download_audio_mp3(
         return None, str(e)
     except Exception as e:
         return None, str(e)
+
+
+def try_facebook_api(url: str, quality: str, facebook_api_url: str) -> Optional[str]:
     """
     Try to get download URL from Facebook Video Download API.
     Returns direct download URL or None if failed.
