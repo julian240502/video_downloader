@@ -8,6 +8,9 @@ echo    Demarrage...
 echo ========================================
 echo.
 
+REM Aller au repertoire correct
+cd /d "%~dp0"
+
 REM Verifier que venv existe
 if not exist "venv\" (
     echo ERREUR : L'installation n'a pas ete faite !
