@@ -10,6 +10,7 @@ import streamlit as st
 from services.downloader import (
     detect_platform,
     download_with_ytdlp,
+    download_audio_mp3,
     get_video_info,
     try_facebook_api,
 )
@@ -120,6 +121,12 @@ with st.sidebar:
         "Facebook API URL (optional)",
         placeholder="http://localhost:8000",
         help="For Facebook videos when yt-dlp fails",
+    )
+    format_choice = st.selectbox(
+        "📁 Format",
+        options=["Video (MP4)", "Audio (MP3)"],
+        index=0,
+        help="Choose download format: video file or audio only",
     )
     quality = st.selectbox(
         "📐 Quality",
@@ -246,10 +253,12 @@ with main_container:
 
         # PHASE 3: Download logic
         if st.session_state.state["download_status"] == "idle":
-            # Show single download button
+            # Show download button
+            is_audio = format_choice == "Audio (MP3)"
+            button_label = "🎵 Download Audio" if is_audio else "⬇️ Download Video"
             col_center = st.columns([1, 2, 1])[1]
             with col_center:
-                if st.button("⬇️ Download Video", type="primary", use_container_width=True, key="start_download"):
+                if st.button(button_label, type="primary", use_container_width=True, key="start_download"):
                     st.session_state.state["download_status"] = "downloading"
                     st.rerun()
         
@@ -309,12 +318,23 @@ with main_container:
                             progress_bar.progress(100)
                             status_text.text("✨ Processing...")
 
-                    file_path, error = download_with_ytdlp(
-                        url,
-                        quality=quality,
-                        output_dir=str(output_dir),
-                        progress_hook=progress_hook,
-                    )
+                    is_audio = format_choice == "Audio (MP3)"
+                    
+                    if is_audio:
+                        # Download audio as MP3
+                        file_path, error = download_audio_mp3(
+                            url,
+                            output_dir=str(output_dir),
+                            progress_hook=progress_hook,
+                        )
+                    else:
+                        # Download video
+                        file_path, error = download_with_ytdlp(
+                            url,
+                            quality=quality,
+                            output_dir=str(output_dir),
+                            progress_hook=progress_hook,
+                        )
 
                     if error:
                         st.session_state.state["error"] = error
@@ -334,15 +354,27 @@ with main_container:
             # Show save button
             file_path = st.session_state.state["file_path"]
             if file_path and os.path.exists(file_path):
-                st.success("✅ Video ready to save!")
+                is_audio = format_choice == "Audio (MP3)"
+                success_msg = "✅ Audio ready to save!" if is_audio else "✅ Video ready to save!"
+                st.success(success_msg)
+                
                 col_center = st.columns([1, 2, 1])[1]
                 with col_center:
                     with open(file_path, "rb") as f:
+                        if is_audio:
+                            file_ext = ".mp3"
+                            mime_type = "audio/mpeg"
+                            button_label = "💾 Save Audio"
+                        else:
+                            file_ext = ".mp4"
+                            mime_type = "video/mp4"
+                            button_label = "💾 Save Video"
+                        
                         st.download_button(
-                            label="💾 Save to Device",
+                            label=button_label,
                             data=f,
-                            file_name=f"video_{Path(file_path).stem}.mp4",
-                            mime="video/mp4",
+                            file_name=f"download_{Path(file_path).stem}{file_ext}",
+                            mime=mime_type,
                             use_container_width=True,
                             type="primary",
                         )
@@ -369,4 +401,4 @@ with main_container:
 
 # Footer
 st.markdown("---")
-st.caption("🛡️ Supports: YouTube, YouTube Shorts, Facebook, Instagram Reels")
+st.caption("🛡️ Supports: YouTube, YouTube Shorts, Facebook, Instagram Reels, and more! Download as Video or Audio")

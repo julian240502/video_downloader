@@ -110,7 +110,68 @@ def download_with_ytdlp(
         return None, str(e)
 
 
-def try_facebook_api(url: str, quality: str, facebook_api_url: str) -> Optional[str]:
+def download_audio_mp3(
+    url: str,
+    output_dir: Optional[str] = None,
+    progress_hook=None,
+) -> tuple[str, Optional[str]]:
+    """
+    Download audio from video and convert to MP3 using yt-dlp.
+
+    Returns:
+        Tuple of (output_path, error_message). error_message is None on success.
+    """
+    output_dir = output_dir or tempfile.gettempdir()
+    # Truncate title to 80 bytes + id for uniqueness; restrictfilenames handles invalid chars
+    output_template = os.path.join(output_dir, "%(title).80B - %(id)s.%(ext)s")
+
+    ydl_opts = {
+        "format": "bestaudio/best",
+        "outtmpl": output_template,
+        "restrictfilenames": True,
+        "quiet": False,
+        "no_warnings": False,
+        "retries": 5,
+        "fragment_retries": 5,
+        "extract_flat": False,
+        "postprocessors": [
+            {
+                "key": "FFmpegExtractAudio",
+                "preferredcodec": "mp3",
+                "preferredquality": "192",
+            }
+        ],
+        "http_headers": {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        },
+    }
+
+    if progress_hook:
+        ydl_opts["progress_hooks"] = [progress_hook]
+
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=True)
+            if not info:
+                return None, "Could not extract video information"
+
+            filename = ydl.prepare_filename(info)
+            # The audio will have .mp3 extension after post-processing
+            base = Path(filename).stem
+            mp3_path = os.path.join(output_dir, base + ".mp3")
+            
+            if os.path.exists(mp3_path):
+                return mp3_path, None
+            
+            # Fallback: check if file exists with original extension
+            if os.path.exists(filename):
+                return filename, None
+
+            return mp3_path, None
+    except yt_dlp.utils.DownloadError as e:
+        return None, str(e)
+    except Exception as e:
+        return None, str(e)
     """
     Try to get download URL from Facebook Video Download API.
     Returns direct download URL or None if failed.
