@@ -73,6 +73,41 @@ def normalize_video_url(url: str) -> str:
     )
 
 
+def normalize_video_url(url: str) -> str:
+    """
+    Normalize supported video URLs before processing.
+
+    For YouTube watch URLs containing a playlist index, remove only the
+    `index` parameter so single-video extraction stays stable.
+    """
+    if not url:
+        return url
+
+    parsed = urlparse(url)
+    host = parsed.netloc.lower()
+
+    if "youtube.com" not in host:
+        return url
+
+    query_items = parse_qsl(parsed.query, keep_blank_values=True)
+    filtered_items = [(k, v) for k, v in query_items if k.lower() != "index"]
+
+    if len(filtered_items) == len(query_items):
+        return url
+
+    normalized_query = urlencode(filtered_items, doseq=True)
+    return urlunparse(
+        (
+            parsed.scheme,
+            parsed.netloc,
+            parsed.path,
+            parsed.params,
+            normalized_query,
+            parsed.fragment,
+        )
+    )
+
+
 def detect_platform(url: str) -> str:
     """Detect the platform from the URL (youtube, facebook, or generic)."""
     url_lower = url.lower()
