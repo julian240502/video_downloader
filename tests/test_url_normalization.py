@@ -1,6 +1,6 @@
 import unittest
 
-from services.downloader import normalize_video_url, subtitle_to_text
+from services.downloader import clean_error_message, normalize_video_url, subtitle_to_text
 
 
 class NormalizeVideoUrlTests(unittest.TestCase):
@@ -73,6 +73,12 @@ Welcome
 Hi there
 """
         self.assertEqual(subtitle_to_text(content), "Hi there\nWelcome\nHi there")
+
+
+class ErrorCleanupTests(unittest.TestCase):
+    def test_removes_ansi_escape_sequences(self):
+        raw = "\x1b[0;31mERROR:\x1b[0m Unable to download subtitles"
+        self.assertEqual(clean_error_message(raw), "ERROR: Unable to download subtitles")
 
 
 if __name__ == "__main__":
