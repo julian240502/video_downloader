@@ -152,6 +152,72 @@ def clean_error_message(message: str) -> str:
     return ANSI_ESCAPE_RE.sub("", message).strip()
 
 
+def _normalize_spaces(text: str) -> str:
+    text = re.sub(r"\s+", " ", text).strip()
+    text = re.sub(r"\s+([,.;:!?])", r"\1", text)
+    text = re.sub(r"([«(])\s+", r"\1", text)
+    text = re.sub(r"\s+([»)])", r"\1", text)
+    return text
+
+
+def _dedupe_consecutive_words(text: str) -> str:
+    return re.sub(r"\b(\w+)(\s+\1\b)+", r"\1", text, flags=re.IGNORECASE)
+
+
+def clean_french_transcript_local(transcript_text: str) -> str:
+    """
+    Local-only readability cleanup for French transcript text.
+    No external API/model required.
+    """
+    raw_lines = [line.strip() for line in transcript_text.splitlines() if line.strip()]
+    if not raw_lines:
+        return transcript_text
+
+    merged_sentences = []
+    buffer = ""
+
+    for line in raw_lines:
+        line = _normalize_spaces(line)
+        if not buffer:
+            buffer = line
+            continue
+
+        buffer_ends = bool(re.search(r"[.!?…:]$", buffer))
+        likely_continuation = (
+            len(line.split()) <= 5
+            or len(buffer.split()) <= 7
+            or line[:1].islower()
+        )
+
+        if buffer_ends and not likely_continuation:
+            merged_sentences.append(buffer)
+            buffer = line
+        else:
+            buffer = f"{buffer} {line}"
+
+    if buffer:
+        merged_sentences.append(buffer)
+
+    cleaned_sentences = []
+    for sentence in merged_sentences:
+        sentence = _dedupe_consecutive_words(_normalize_spaces(sentence))
+        if not sentence:
+            continue
+        # Capitalize first letter if needed
+        sentence = sentence[0].upper() + sentence[1:] if sentence else sentence
+        # Add terminal punctuation if missing
+        if sentence[-1] not in ".!?…":
+            sentence += "."
+        cleaned_sentences.append(sentence)
+
+    # Group every 3 sentences into a paragraph for better readability
+    paragraphs = []
+    for i in range(0, len(cleaned_sentences), 3):
+        paragraphs.append(" ".join(cleaned_sentences[i : i + 3]))
+
+    return "\n\n".join(paragraphs).strip()
+
+
 def download_with_ytdlp(
     url: str,
     quality: str = "best",
@@ -280,6 +346,7 @@ def download_transcript_txt(
     url: str,
     output_dir: Optional[str] = None,
     subtitles_sleep_seconds: float = 2.0,
+    cleanup_transcript: bool = True,
 ) -> tuple[str, Optional[str]]:
     """
     Download subtitles/auto-captions and convert them to a TXT transcript.
@@ -347,6 +414,9 @@ def download_transcript_txt(
                 transcript_text = subtitle_to_text(subtitle_content)
                 if not transcript_text:
                     return None, "Subtitles were found but transcript text is empty"
+
+                if cleanup_transcript:
+                    transcript_text = clean_french_transcript_local(transcript_text)
 
                 txt_path = os.path.join(output_dir, f"{base_name}.txt")
                 with open(txt_path, "w", encoding="utf-8") as f:

@@ -144,6 +144,11 @@ with st.sidebar:
         step=0.5,
         help="Equivalent to yt-dlp --sleep-subtitles TIME (used in Transcript mode only).",
     )
+    cleanup_transcript = st.checkbox(
+        "✨ Nettoyer la transcription (local)",
+        value=True,
+        help="Améliore la lisibilité (ponctuation/paragraphes) localement, sans API externe.",
+    )
     st.markdown("---")
     st.caption("💡 **How it works:**")
     st.caption("1. Paste your video URL")
@@ -349,6 +354,7 @@ with main_container:
                             url,
                             output_dir=str(output_dir),
                             subtitles_sleep_seconds=float(subtitles_sleep_seconds),
+                            cleanup_transcript=bool(cleanup_transcript),
                         )
                     elif is_audio:
                         # Download audio as MP3
