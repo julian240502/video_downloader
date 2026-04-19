@@ -24,6 +24,54 @@ FACEBOOK_PATTERNS = [
     r"fbcdn\.net",
 ]
 
+# YouTube query params that are useful for navigation/tracking but not
+# required for single-video extraction in this app.
+YOUTUBE_REMOVABLE_PARAMS = {
+    "index",
+    "start_radio",
+    "pp",
+    "feature",
+}
+
+
+def normalize_video_url(url: str) -> str:
+    """
+    Normalize supported video URLs before processing.
+
+    Remove YouTube query parameters that can interfere with single-video
+    extraction while keeping core identifiers intact.
+    """
+    if not url:
+        return url
+
+    parsed = urlparse(url)
+    host = parsed.netloc.lower()
+
+    if "youtube.com" not in host and "youtu.be" not in host:
+        return url
+
+    query_items = parse_qsl(parsed.query, keep_blank_values=True)
+    filtered_items = [
+        (k, v)
+        for k, v in query_items
+        if k.lower() not in YOUTUBE_REMOVABLE_PARAMS
+    ]
+
+    if len(filtered_items) == len(query_items):
+        return url
+
+    normalized_query = urlencode(filtered_items, doseq=True)
+    return urlunparse(
+        (
+            parsed.scheme,
+            parsed.netloc,
+            parsed.path,
+            parsed.params,
+            normalized_query,
+            parsed.fragment,
+        )
+    )
+
 
 def normalize_video_url(url: str) -> str:
     """

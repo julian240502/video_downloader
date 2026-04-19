@@ -185,7 +185,7 @@ raw_url = st.text_input(
 url = normalize_video_url(raw_url.strip()) if raw_url else ""
 
 if raw_url and raw_url != url:
-    st.caption("ℹ️ Le paramètre YouTube `index` a été retiré automatiquement pour améliorer la compatibilité.")
+    st.caption("ℹ️ Certains paramètres YouTube (index/share/radio/pp) ont été retirés automatiquement pour améliorer la compatibilité.")
 
 # Detect if URL changed
 url_changed = url != st.session_state.state["current_url"]
