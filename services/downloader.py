@@ -173,49 +173,18 @@ def clean_french_transcript_local(transcript_text: str) -> str:
     if not raw_lines:
         return transcript_text
 
-    merged_sentences = []
-    buffer = ""
-
+    cleaned_lines = []
     for line in raw_lines:
-        line = _normalize_spaces(line)
-        if not buffer:
-            buffer = line
+        line = _dedupe_consecutive_words(_normalize_spaces(line))
+        if not line:
             continue
+        line = line[0].upper() + line[1:] if line else line
+        if line[-1] not in ".!?…":
+            line += "."
+        cleaned_lines.append(line)
 
-        buffer_ends = bool(re.search(r"[.!?…:]$", buffer))
-        likely_continuation = (
-            len(line.split()) <= 5
-            or len(buffer.split()) <= 7
-            or line[:1].islower()
-        )
-
-        if buffer_ends and not likely_continuation:
-            merged_sentences.append(buffer)
-            buffer = line
-        else:
-            buffer = f"{buffer} {line}"
-
-    if buffer:
-        merged_sentences.append(buffer)
-
-    cleaned_sentences = []
-    for sentence in merged_sentences:
-        sentence = _dedupe_consecutive_words(_normalize_spaces(sentence))
-        if not sentence:
-            continue
-        # Capitalize first letter if needed
-        sentence = sentence[0].upper() + sentence[1:] if sentence else sentence
-        # Add terminal punctuation if missing
-        if sentence[-1] not in ".!?…":
-            sentence += "."
-        cleaned_sentences.append(sentence)
-
-    # Group every 3 sentences into a paragraph for better readability
-    paragraphs = []
-    for i in range(0, len(cleaned_sentences), 3):
-        paragraphs.append(" ".join(cleaned_sentences[i : i + 3]))
-
-    return "\n\n".join(paragraphs).strip()
+    # Keep classic one-line-per-segment layout for easier reading/editing.
+    return "\n".join(cleaned_lines).strip()
 
 
 def download_with_ytdlp(
