@@ -3,8 +3,10 @@
 import os
 import re
 import tempfile
+import time
 from pathlib import Path
 from typing import Optional
+from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 import yt_dlp
 import requests
@@ -22,6 +24,57 @@ FACEBOOK_PATTERNS = [
     r"fb\.com",
     r"fbcdn\.net",
 ]
+
+# YouTube query params that are useful for navigation/tracking but not
+# required for single-video extraction in this app.
+YOUTUBE_REMOVABLE_PARAMS = {
+    "index",
+    "start_radio",
+    "pp",
+    "feature",
+}
+
+
+ANSI_ESCAPE_RE = re.compile(r"\x1B\[[0-?]*[ -/]*[@-~]")
+
+
+def normalize_video_url(url: str) -> str:
+    """
+    Normalize supported video URLs before processing.
+
+    Remove YouTube query parameters that can interfere with single-video
+    extraction while keeping core identifiers intact.
+    """
+    if not url:
+        return url
+
+    parsed = urlparse(url)
+    host = parsed.netloc.lower()
+
+    if "youtube.com" not in host and "youtu.be" not in host:
+        return url
+
+    query_items = parse_qsl(parsed.query, keep_blank_values=True)
+    filtered_items = [
+        (k, v)
+        for k, v in query_items
+        if k.lower() not in YOUTUBE_REMOVABLE_PARAMS
+    ]
+
+    if len(filtered_items) == len(query_items):
+        return url
+
+    normalized_query = urlencode(filtered_items, doseq=True)
+    return urlunparse(
+        (
+            parsed.scheme,
+            parsed.netloc,
+            parsed.path,
+            parsed.params,
+            normalized_query,
+            parsed.fragment,
+        )
+    )
 
 
 def detect_platform(url: str) -> str:
@@ -48,6 +101,55 @@ def get_yt_dlp_format(quality: str) -> str:
         "1080p": "best[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080][ext=mp4]/best[height<=1080]",
     }
     return formats.get(quality, formats["best"])
+
+
+def subtitle_to_text(subtitle_content: str) -> str:
+    """
+    Convert VTT/SRT subtitle content into plain readable text.
+    """
+    lines = subtitle_content.splitlines()
+    cleaned_lines = []
+    previous_line_key = None
+
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+
+        # Skip VTT header and metadata
+        if line.upper() == "WEBVTT" or line.startswith("NOTE") or line.startswith("Kind:") or line.startswith("Language:"):
+            continue
+
+        # Skip cue numbers and timestamp lines
+        if line.isdigit():
+            continue
+        if "-->" in line:
+            continue
+
+        # Remove inline VTT/SRT tags and speaker markers
+        line = re.sub(r"<[^>]+>", "", line)
+        line = re.sub(r"\{\\an\d+\}", "", line)
+        line = re.sub(r"^\[[^\]]+\]\s*", "", line)
+        line = line.strip()
+
+        if not line:
+            continue
+
+        # Avoid consecutive duplicate lines common in auto-captions
+        dedupe_key = line.lower()
+        if dedupe_key == previous_line_key:
+            continue
+        previous_line_key = dedupe_key
+        cleaned_lines.append(line)
+
+    return "\n".join(cleaned_lines).strip()
+
+
+def clean_error_message(message: str) -> str:
+    """Remove ANSI escape sequences and trim whitespace for UI display."""
+    if not message:
+        return message
+    return ANSI_ESCAPE_RE.sub("", message).strip()
 
 
 def download_with_ytdlp(
@@ -172,6 +274,89 @@ def download_audio_mp3(
         return None, str(e)
     except Exception as e:
         return None, str(e)
+
+
+def download_transcript_txt(
+    url: str,
+    output_dir: Optional[str] = None,
+    subtitles_sleep_seconds: float = 2.0,
+) -> tuple[str, Optional[str]]:
+    """
+    Download subtitles/auto-captions and convert them to a TXT transcript.
+    """
+    output_dir = output_dir or tempfile.gettempdir()
+    output_template = os.path.join(output_dir, "%(title).80B - %(id)s.%(ext)s")
+
+    ydl_opts = {
+        "skip_download": True,
+        "writesubtitles": True,
+        "writeautomaticsub": True,
+        "subtitlesformat": "vtt/srt/best",
+        "subtitleslangs": ["fr", "fr-*", "en", "en-*", ".*"],
+        "outtmpl": output_template,
+        "restrictfilenames": True,
+        "quiet": False,
+        "no_warnings": False,
+        "retries": 5,
+        "fragment_retries": 5,
+        "sleep_interval_subtitles": max(0.0, float(subtitles_sleep_seconds)),
+        "extract_flat": False,
+        "http_headers": {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        },
+    }
+
+    try:
+        max_attempts = 3
+        for attempt in range(1, max_attempts + 1):
+            start_mtime = time.time()
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                try:
+                    info = ydl.extract_info(url, download=True)
+                except yt_dlp.utils.DownloadError as e:
+                    error_text = clean_error_message(str(e))
+                    is_rate_limited = "HTTP Error 429" in error_text
+                    if is_rate_limited and attempt < max_attempts:
+                        time.sleep(2 * attempt)
+                        continue
+                    if is_rate_limited:
+                        return None, "YouTube subtitles are temporarily rate-limited (HTTP 429). Please retry in a few minutes."
+                    return None, error_text
+
+                if not info:
+                    return None, "Could not extract video information"
+
+                media_filename = ydl.prepare_filename(info)
+                base_name = Path(media_filename).stem
+
+                subtitle_candidates = []
+                for ext in ("vtt", "srt"):
+                    subtitle_candidates.extend(Path(output_dir).glob(f"{base_name}*.{ext}"))
+
+                subtitle_candidates = [p for p in subtitle_candidates if p.exists() and p.stat().st_mtime >= start_mtime]
+
+                if not subtitle_candidates:
+                    return None, "No subtitles or automatic captions available for this URL"
+
+                subtitle_candidates = sorted(subtitle_candidates, key=lambda p: len(p.name))
+                subtitle_path = subtitle_candidates[0]
+
+                with open(subtitle_path, "r", encoding="utf-8", errors="ignore") as f:
+                    subtitle_content = f.read()
+
+                transcript_text = subtitle_to_text(subtitle_content)
+                if not transcript_text:
+                    return None, "Subtitles were found but transcript text is empty"
+
+                txt_path = os.path.join(output_dir, f"{base_name}.txt")
+                with open(txt_path, "w", encoding="utf-8") as f:
+                    f.write(transcript_text)
+
+                return txt_path, None
+    except yt_dlp.utils.DownloadError as e:
+        return None, clean_error_message(str(e))
+    except Exception as e:
+        return None, clean_error_message(str(e))
 
 
 def try_facebook_api(url: str, quality: str, facebook_api_url: str) -> Optional[str]:
