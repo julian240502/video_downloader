@@ -158,6 +158,7 @@ if "state" not in st.session_state:
         "video_info": None,
         "download_status": "idle",  # idle, fetching_info, downloading, ready, error
         "file_path": None,
+        "download_format": None,
         "error": None,
     }
 
@@ -174,6 +175,7 @@ if st.session_state.reset_flag:
         "video_info": None,
         "download_status": "idle",
         "file_path": None,
+        "download_format": None,
         "error": None,
     }
     st.session_state.url_input = ""
@@ -204,6 +206,7 @@ if url_changed:
     st.session_state.state["video_info"] = None
     st.session_state.state["download_status"] = "idle"
     st.session_state.state["file_path"] = None
+    st.session_state.state["download_format"] = None
     st.session_state.state["error"] = None
 
 # Auto-detect platform and show badge
@@ -278,6 +281,7 @@ with main_container:
             col_center = st.columns([1, 2, 1])[1]
             with col_center:
                 if st.button(button_label, type="primary", use_container_width=True, key="start_download"):
+                    st.session_state.state["download_format"] = format_choice
                     st.session_state.state["download_status"] = "downloading"
                     st.rerun()
         
@@ -288,8 +292,9 @@ with main_container:
             
             output_dir = Path(tempfile.gettempdir()) / "video_downloader"
             output_dir.mkdir(exist_ok=True)
-            is_audio = format_choice == "Audio (MP3)"
-            is_transcript = format_choice == "Transcript (TXT)"
+            selected_format = st.session_state.state.get("download_format") or format_choice
+            is_audio = selected_format == "Audio (MP3)"
+            is_transcript = selected_format == "Transcript (TXT)"
             
             try:
                 # Try Facebook API first if applicable
@@ -379,8 +384,9 @@ with main_container:
             # Show save button
             file_path = st.session_state.state["file_path"]
             if file_path and os.path.exists(file_path):
-                is_audio = format_choice == "Audio (MP3)"
-                is_transcript = format_choice == "Transcript (TXT)"
+                selected_format = st.session_state.state.get("download_format") or format_choice
+                is_audio = selected_format == "Audio (MP3)"
+                is_transcript = selected_format == "Transcript (TXT)"
                 if is_transcript:
                     success_msg = "✅ Transcript ready to save!"
                 else:
@@ -420,6 +426,7 @@ with main_container:
                 st.error("❌ File not found. Please try again.")
                 if st.button("🔄 Retry", type="primary"):
                     st.session_state.state["download_status"] = "idle"
+                    st.session_state.state["download_format"] = None
                     st.rerun()
         
         elif st.session_state.state["download_status"] == "error":
@@ -429,6 +436,7 @@ with main_container:
             
             if st.button("🔄 Retry Download", type="primary"):
                 st.session_state.state["download_status"] = "idle"
+                st.session_state.state["download_format"] = None
                 st.session_state.state["error"] = None
                 st.rerun()
 
