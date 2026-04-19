@@ -12,6 +12,7 @@ from services.downloader import (
     download_with_ytdlp,
     download_audio_mp3,
     get_video_info,
+    normalize_video_url,
     try_facebook_api,
 )
 
@@ -175,12 +176,16 @@ if st.session_state.reset_flag:
     """, unsafe_allow_html=True)
 
 # Main URL input
-url = st.text_input(
+raw_url = st.text_input(
     "🔗 Video URL",
     placeholder="Paste YouTube, Shorts, Facebook, or Reels link here...",
     help="Supports: youtube.com, youtu.be, youtube.com/shorts/, facebook.com, fb.watch",
     key="url_input",
 )
+url = normalize_video_url(raw_url.strip()) if raw_url else ""
+
+if raw_url and raw_url != url:
+    st.caption("ℹ️ Certains paramètres YouTube (index/share/radio/pp) ont été retirés automatiquement pour améliorer la compatibilité.")
 
 # Detect if URL changed
 url_changed = url != st.session_state.state["current_url"]
