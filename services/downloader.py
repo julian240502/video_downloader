@@ -279,6 +279,7 @@ def download_audio_mp3(
 def download_transcript_txt(
     url: str,
     output_dir: Optional[str] = None,
+    subtitles_sleep_seconds: float = 2.0,
 ) -> tuple[str, Optional[str]]:
     """
     Download subtitles/auto-captions and convert them to a TXT transcript.
@@ -298,7 +299,7 @@ def download_transcript_txt(
         "no_warnings": False,
         "retries": 5,
         "fragment_retries": 5,
-        "sleep_interval_subtitles": 2,
+        "sleep_interval_subtitles": max(0.0, float(subtitles_sleep_seconds)),
         "extract_flat": False,
         "http_headers": {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",

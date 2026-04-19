@@ -136,6 +136,14 @@ with st.sidebar:
         index=0,
         help="Higher quality = larger file size",
     )
+    subtitles_sleep_seconds = st.number_input(
+        "⏱️ Sleep subtitles (sec)",
+        min_value=0.0,
+        max_value=30.0,
+        value=2.0,
+        step=0.5,
+        help="Equivalent to yt-dlp --sleep-subtitles TIME (used in Transcript mode only).",
+    )
     st.markdown("---")
     st.caption("💡 **How it works:**")
     st.caption("1. Paste your video URL")
@@ -335,6 +343,7 @@ with main_container:
                         file_path, error = download_transcript_txt(
                             url,
                             output_dir=str(output_dir),
+                            subtitles_sleep_seconds=float(subtitles_sleep_seconds),
                         )
                     elif is_audio:
                         # Download audio as MP3
