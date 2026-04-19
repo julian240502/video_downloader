@@ -11,7 +11,9 @@ from services.downloader import (
     detect_platform,
     download_with_ytdlp,
     download_audio_mp3,
+    download_transcript_txt,
     get_video_info,
+    normalize_video_url,
     try_facebook_api,
 )
 
@@ -124,9 +126,9 @@ with st.sidebar:
     )
     format_choice = st.selectbox(
         "📁 Format",
-        options=["Video (MP4)", "Audio (MP3)"],
+        options=["Video (MP4)", "Audio (MP3)", "Transcript (TXT)"],
         index=0,
-        help="Choose download format: video file or audio only",
+        help="Choose download format: video file, audio only, or transcript text",
     )
     quality = st.selectbox(
         "📐 Quality",
@@ -139,6 +141,7 @@ with st.sidebar:
     st.caption("1. Paste your video URL")
     st.caption("2. Preview loads automatically")
     st.caption("3. Download when ready")
+    st.caption("📝 Transcript mode uses yt-dlp subtitles/captions only (not AI transcription).")
 
 # Initialize session state with simpler structure
 if "state" not in st.session_state:
@@ -175,12 +178,16 @@ if st.session_state.reset_flag:
     """, unsafe_allow_html=True)
 
 # Main URL input
-url = st.text_input(
+raw_url = st.text_input(
     "🔗 Video URL",
     placeholder="Paste YouTube, Shorts, Facebook, or Reels link here...",
     help="Supports: youtube.com, youtu.be, youtube.com/shorts/, facebook.com, fb.watch",
     key="url_input",
 )
+url = normalize_video_url(raw_url.strip()) if raw_url else ""
+
+if raw_url and raw_url != url:
+    st.caption("ℹ️ Certains paramètres YouTube (index/share/radio/pp) ont été retirés automatiquement pour améliorer la compatibilité.")
 
 # Detect if URL changed
 url_changed = url != st.session_state.state["current_url"]
@@ -255,7 +262,11 @@ with main_container:
         if st.session_state.state["download_status"] == "idle":
             # Show download button
             is_audio = format_choice == "Audio (MP3)"
-            button_label = "🎵 Download Audio" if is_audio else "⬇️ Download Video"
+            is_transcript = format_choice == "Transcript (TXT)"
+            if is_transcript:
+                button_label = "📝 Extract Transcript"
+            else:
+                button_label = "🎵 Download Audio" if is_audio else "⬇️ Download Video"
             col_center = st.columns([1, 2, 1])[1]
             with col_center:
                 if st.button(button_label, type="primary", use_container_width=True, key="start_download"):
@@ -269,10 +280,12 @@ with main_container:
             
             output_dir = Path(tempfile.gettempdir()) / "video_downloader"
             output_dir.mkdir(exist_ok=True)
+            is_audio = format_choice == "Audio (MP3)"
+            is_transcript = format_choice == "Transcript (TXT)"
             
             try:
                 # Try Facebook API first if applicable
-                if platform == "facebook" and facebook_api_url:
+                if platform == "facebook" and facebook_api_url and not is_transcript:
                     download_url = try_facebook_api(url, quality, facebook_api_url)
                     if download_url:
                         tmpf = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4", dir=str(output_dir))
@@ -318,9 +331,12 @@ with main_container:
                             progress_bar.progress(100)
                             status_text.text("✨ Processing...")
 
-                    is_audio = format_choice == "Audio (MP3)"
-                    
-                    if is_audio:
+                    if is_transcript:
+                        file_path, error = download_transcript_txt(
+                            url,
+                            output_dir=str(output_dir),
+                        )
+                    elif is_audio:
                         # Download audio as MP3
                         file_path, error = download_audio_mp3(
                             url,
@@ -355,13 +371,21 @@ with main_container:
             file_path = st.session_state.state["file_path"]
             if file_path and os.path.exists(file_path):
                 is_audio = format_choice == "Audio (MP3)"
-                success_msg = "✅ Audio ready to save!" if is_audio else "✅ Video ready to save!"
+                is_transcript = format_choice == "Transcript (TXT)"
+                if is_transcript:
+                    success_msg = "✅ Transcript ready to save!"
+                else:
+                    success_msg = "✅ Audio ready to save!" if is_audio else "✅ Video ready to save!"
                 st.success(success_msg)
                 
                 col_center = st.columns([1, 2, 1])[1]
                 with col_center:
                     with open(file_path, "rb") as f:
-                        if is_audio:
+                        if is_transcript:
+                            file_ext = ".txt"
+                            mime_type = "text/plain"
+                            button_label = "💾 Save Transcript"
+                        elif is_audio:
                             file_ext = ".mp3"
                             mime_type = "audio/mpeg"
                             button_label = "💾 Save Audio"
