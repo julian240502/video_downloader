@@ -292,7 +292,7 @@ def download_transcript_txt(
         "writesubtitles": True,
         "writeautomaticsub": True,
         "subtitlesformat": "vtt/srt/best",
-        "subtitleslangs": ["fr", "fr-*", "en", "en-*", ".*"],
+        "subtitleslangs": ["fr", "fr-*"],
         "outtmpl": output_template,
         "restrictfilenames": True,
         "quiet": False,
